@@ -307,7 +307,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     wc.lpfnWndProc = WndProc;
     wc.hInstance = hInstance;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
+    // [Fix] 将窗口背景颜色改为系统按钮面颜色(灰色)，解决与控件的色差问题
+    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
     wc.lpszClassName = L"NetToolProClass";
     wc.hIcon = LoadIcon(hInstance, L"IDI_MAIN_ICON"); 
     wc.hIconSm = wc.hIcon;
@@ -539,14 +540,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
 
     // === 修复界面色差问题 ===
-    // 拦截静态文本和按钮（分组框）的颜色消息，设置背景透明
+    // 1. 设置背景模式为透明 (TRANSPARENT)
+    // 2. 返回 COLOR_BTNFACE 画刷，确保与主窗口背景一致
     case WM_CTLCOLORSTATIC:
     case WM_CTLCOLORBTN:
         {
             HDC hdc = (HDC)wParam;
             SetBkMode(hdc, TRANSPARENT);
-            // 返回白色画刷（因为主窗口背景是白色的）
-            return (LRESULT)GetStockObject(WHITE_BRUSH);
+            // 返回系统按钮面颜色的画刷
+            return (LRESULT)GetSysColorBrush(COLOR_BTNFACE);
         }
 
     case WM_DESTROY:
