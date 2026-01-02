@@ -1,14 +1,18 @@
 #include "MainWindow.h"
 #include <QApplication>
+#include <QIcon> // 新增头文件
 
 int main(int argc, char *argv[]) {
-    // 处理高分屏缩放
     QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     
     QApplication app(argc, argv);
     
-    // 设置应用程序风格 (Fusion 风格在各平台表现一致且现代)
     app.setStyle("Fusion");
+    
+    // --- 新增代码: 设置全局窗口图标 ---
+    // ":/app.ico" 对应 .qrc 文件中的 prefix("/") + file path
+    app.setWindowIcon(QIcon(":/app.ico")); 
+    // --------------------------------
     
     MainWindow window;
     window.show();
