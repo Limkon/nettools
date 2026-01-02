@@ -5,12 +5,11 @@ project(NetToolProC VERSION 3.7 LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# === 核心修复 ===
-# 1. 定义 UNICODE 宏，切换到 Windows 宽字符 API
+# === 核心修复：解决乱码的关键 ===
+# 1. 定义 Unicode 宏，启用 Windows 宽字符 API
 add_compile_definitions(UNICODE _UNICODE)
 
 # 2. 强制 MSVC 使用 UTF-8 读取源码并生成执行字符集
-# 这确保了代码中的 L"中文" 能被正确编译
 if(MSVC)
     add_compile_options(/utf-8)
 endif()
@@ -44,6 +43,5 @@ if(WIN32)
         advapi32
         wininet
     )
-    # 设置为 Windows GUI 子系统
     set_target_properties(NetToolPro PROPERTIES WIN32_EXECUTABLE ON)
 endif()
