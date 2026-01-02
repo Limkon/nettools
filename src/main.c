@@ -34,7 +34,7 @@
 #define ID_STATUS_BAR       114
 #define ID_BTN_EXPORT       115
 
-// [新增] IP归属地复选框
+// IP归属地复选框
 #define ID_CHECK_LOCATION   118
 
 // 右键菜单 ID
@@ -42,6 +42,7 @@
 #define IDM_SELECT_ALL      202
 #define IDM_DEL_OFFLINE     203
 #define IDM_DEL_SELECTED    204 
+#define IDM_REMOVE_DUPLICATE 205 // [新增] 去重菜单ID
 
 HINSTANCE hInst;
 HWND hMainWnd, hList, hStatus;
@@ -89,7 +90,6 @@ wchar_t* get_alloc_text(HWND hwnd) {
     return buf;
 }
 
-// [修改] 解析更多列
 void add_list_row(const wchar_t* pipedData) {
     wchar_t* copy = _wcsdup(pipedData);
     wchar_t* ctx;
@@ -105,7 +105,6 @@ void add_list_row(const wchar_t* pipedData) {
     
     int col = 1;
     while ((token = wcstok_s(NULL, L"|", &ctx))) {
-        // [修复] 增加花括号以避免宏展开导致的 if-else 错误
         if (wcscmp(token, L"-") == 0) {
             ListView_SetItemText(hList, lvItem.iItem, col++, L"");
         } else {
@@ -115,6 +114,7 @@ void add_list_row(const wchar_t* pipedData) {
     free(copy);
 }
 
+// 列表排序比较回调函数
 int CALLBACK CompareListViewItems(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort) {
     int col = (int)lParamSort; 
     
@@ -125,6 +125,7 @@ int CALLBACK CompareListViewItems(LPARAM lParam1, LPARAM lParam2, LPARAM lParamS
     int result = 0;
     int isNumeric = 0;
 
+    // 判断是否为数值列
     if (g_currentTask == TASK_PING && (col == 2 || col == 3 || col == 4)) {
         isNumeric = 1;
     }
@@ -132,6 +133,7 @@ int CALLBACK CompareListViewItems(LPARAM lParam1, LPARAM lParam2, LPARAM lParamS
         isNumeric = 1;
     }
 
+    // IP归属地列（文本）将自动进入 else 分支使用 wcscmp 进行字典序排序，因此无需额外修改即可支持排序
     if (isNumeric) {
         if (g_currentTask == TASK_PING) {
              int isInvalid1 = (wcsstr(buf1, L"N/A") || wcsstr(buf1, L"超时") || wcslen(buf1)==0);
@@ -219,6 +221,56 @@ void DeleteSelectedItems() {
     SendMessage(hList, WM_SETREDRAW, TRUE, 0);
 }
 
+// [新增] 去除重复项函数
+void RemoveDuplicateItems() {
+    int count = ListView_GetItemCount(hList);
+    if (count <= 1) return;
+    
+    // 如果数据量巨大，提示一下
+    if (count > 5000) {
+        if (MessageBoxW(hMainWnd, L"数据量较大，去重可能需要一点时间，是否继续？", L"提示", MB_YESNO) == IDNO) return;
+    }
+
+    SendMessage(hList, WM_SETREDRAW, FALSE, 0);
+    
+    // 使用双重循环去重，保留第一次出现的项
+    for (int i = 0; i < count; i++) {
+        wchar_t key1[256] = {0};
+        ListView_GetItemText(hList, i, 0, key1, 255);
+        
+        // 如果是端口扫描，不仅比较IP，还要比较端口 (第2列)
+        if (g_currentTask == TASK_SCAN || g_currentTask == TASK_SINGLE_SCAN) {
+             wchar_t port[32];
+             ListView_GetItemText(hList, i, 1, port, 31);
+             wcscat_s(key1, 256, L":");
+             wcscat_s(key1, 256, port);
+        }
+
+        // 内层循环倒序，方便删除
+        for (int j = count - 1; j > i; j--) {
+            wchar_t key2[256] = {0};
+            ListView_GetItemText(hList, j, 0, key2, 255);
+            
+            if (g_currentTask == TASK_SCAN || g_currentTask == TASK_SINGLE_SCAN) {
+                 wchar_t port[32];
+                 ListView_GetItemText(hList, j, 1, port, 31);
+                 wcscat_s(key2, 256, L":");
+                 wcscat_s(key2, 256, port);
+            }
+
+            if (wcscmp(key1, key2) == 0) {
+                ListView_DeleteItem(hList, j);
+                count--; // 更新总数
+            }
+        }
+    }
+    SendMessage(hList, WM_SETREDRAW, TRUE, 0);
+    
+    wchar_t msg[64];
+    swprintf_s(msg, 64, L"去重完成，当前剩余 %d 项", count);
+    MessageBoxW(hMainWnd, msg, L"完成", MB_OK);
+}
+
 void export_csv() {
     wchar_t path[MAX_PATH] = {0};
     OPENFILENAMEW ofn = {0};
@@ -269,7 +321,7 @@ void start_task(TaskType type) {
     p->retryCount = GetDlgItemInt(hMainWnd, ID_EDIT_COUNT, NULL, FALSE);
     p->timeoutMs = GetDlgItemInt(hMainWnd, ID_EDIT_TIMEOUT, NULL, FALSE);
     
-    // [New] 获取归属地复选框状态
+    // 获取归属地复选框状态
     p->showLocation = (IsDlgButtonChecked(hMainWnd, ID_CHECK_LOCATION) == BST_CHECKED);
 
     if (type == TASK_SINGLE_SCAN) {
@@ -308,7 +360,6 @@ void start_task(TaskType type) {
     while(ListView_DeleteColumn(hList, 0));
 
     if (type == TASK_PING) {
-        // [修改] 动态增加归属地列
         int colIdx = 0;
         wchar_t* cols[] = {L"目标地址", L"状态", L"平均延迟(ms)", L"丢包率(%)", L"TTL"};
         for(int i=0; i<5; i++) {
@@ -423,9 +474,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             CreateWindowW(L"STATIC", L"Ping次数:", WS_CHILD|WS_VISIBLE, 500, grp1Y+85, 90, 20, hWnd, NULL, hInst, NULL);
             hEditCount = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"5", WS_CHILD|WS_VISIBLE|ES_NUMBER, 600, grp1Y+83, 60, 23, hWnd, (HMENU)ID_EDIT_COUNT, hInst, NULL);
 
-            // [New] 增加 IP 归属地复选框
+            // IP 归属地复选框 - 默认不勾选 (BST_UNCHECKED)
             CreateWindowW(L"BUTTON", L"显示 IP 归属地 (需 qqwry.dat)", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 500, grp1Y+120, 200, 20, hWnd, (HMENU)ID_CHECK_LOCATION, hInst, NULL);
-            CheckDlgButton(hWnd, ID_CHECK_LOCATION, BST_CHECKED); // 默认勾选
+            CheckDlgButton(hWnd, ID_CHECK_LOCATION, BST_UNCHECKED); 
 
             CreateWindowW(L"STATIC", L"批量扫描端口:", WS_CHILD|WS_VISIBLE, 30, grp1Y+160, 90, 20, hWnd, NULL, hInst, NULL);
             hEditPorts = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"80,443,8080,1433,3306,3389", WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL, 120, grp1Y+158, 750, 23, hWnd, (HMENU)ID_EDIT_PORTS, hInst, NULL);
@@ -485,6 +536,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 HMENU hMenu = CreatePopupMenu();
                 AppendMenuW(hMenu, MF_STRING, IDM_COPY, L"复制选中内容");
                 AppendMenuW(hMenu, MF_STRING, IDM_SELECT_ALL, L"全选");
+                AppendMenuW(hMenu, MF_STRING, IDM_REMOVE_DUPLICATE, L"去除重复项"); // [新增]
                 AppendMenuW(hMenu, MF_STRING, IDM_DEL_SELECTED, L"删除选中项");
                 if (g_currentTask == TASK_PING) {
                     AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
@@ -516,6 +568,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case IDM_SELECT_ALL: ListView_SetItemState(hList, -1, LVIS_SELECTED, LVIS_SELECTED); break;
         case IDM_DEL_OFFLINE: DeleteOfflineItems(); break;
         case IDM_DEL_SELECTED: DeleteSelectedItems(); break;
+        case IDM_REMOVE_DUPLICATE: RemoveDuplicateItems(); break; // [新增] 处理去重
 
         case ID_BTN_STOP: 
             signal_stop_task(); 
