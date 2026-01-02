@@ -5,6 +5,7 @@
 #include <windows.h>
 #include <tchar.h>
 
+// 消息定义
 #define WM_USER_LOG     (WM_USER + 100) 
 #define WM_USER_RESULT  (WM_USER + 101) 
 #define WM_USER_FINISH  (WM_USER + 102) 
@@ -24,10 +25,16 @@ typedef struct {
     int timeoutMs;
 } ThreadParams;
 
+// 任务控制
+void signal_stop_task(); // 发送停止信号
+void reset_stop_task();  // 重置停止信号
+
+// 代理管理
 int proxy_set_system(const wchar_t* ip, int port);
 int proxy_unset_system();
 void proxy_init_backup(); 
 
+// 线程入口
 unsigned int __stdcall thread_ping(void* arg);
 unsigned int __stdcall thread_port_scan(void* arg);
 unsigned int __stdcall thread_single_scan(void* arg);
