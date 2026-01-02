@@ -23,17 +23,11 @@ typedef struct {
     wchar_t* portsInput;   
     int retryCount;
     int timeoutMs;
-    int showLocation; // [New] 是否显示归属地
 } ThreadParams;
 
-// IP 数据库支持
-int LoadIPDB(const wchar_t* path);
-void FreeIPDB();
-void QueryIPLocation(const char* ip, wchar_t* location, int size);
-
 // 任务控制
-void signal_stop_task();
-void reset_stop_task();
+void signal_stop_task(); // 发送停止信号
+void reset_stop_task();  // 重置停止信号
 
 // 代理管理
 int proxy_set_system(const wchar_t* ip, int port);
@@ -47,8 +41,5 @@ unsigned int __stdcall thread_single_scan(void* arg);
 unsigned int __stdcall thread_extract_ip(void* arg);
 
 void free_thread_params(ThreadParams* params);
-
-// 结果发送辅助
-void post_result(HWND hwnd, const wchar_t* col1, const wchar_t* col2, const wchar_t* col3, const wchar_t* col4, const wchar_t* col5, const wchar_t* col6);
 
 #endif // NETWORK_TOOLS_H
