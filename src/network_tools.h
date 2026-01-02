@@ -1,6 +1,8 @@
 #ifndef NETWORK_TOOLS_H
 #define NETWORK_TOOLS_H
 
+// 必须在 windows.h 之前包含 winsock2.h 以避免 Winsock 1.x 冲突
+#include <winsock2.h>
 #include <windows.h>
 
 // 任务类型定义，用于主线程识别消息来源
