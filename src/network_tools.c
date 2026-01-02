@@ -1,3 +1,4 @@
+#include "network_tools.h"
 #include <winsock2.h>
 #include <iphlpapi.h>
 #include <icmpapi.h>
@@ -5,8 +6,8 @@
 #include <stdlib.h>
 #include <process.h>
 
-#pragma comment(lib, \"iphlpapi.lib\")
-#pragma comment(lib, \"ws2_32.lib\")
+#pragma comment(lib, "iphlpapi.lib")
+#pragma comment(lib, "ws2_32.lib")
 
 // 自定义消息，用于通知主窗口
 #define WM_USER_LOG     (WM_USER + 100) // wParam=Progress, lParam=StringPtr
@@ -22,8 +23,6 @@ static int g_hasBackup = 0;
 
 // 简单的字符串分割并去重，返回字符串数组，count为传出数量
 char** split_hosts(const char* input, int* count) {
-    // 简单实现：将换行、逗号、空格视为分隔符
-    // 实际项目中建议使用更健壮的解析
     if (!input) { *count = 0; return NULL; }
     
     char* copy = _strdup(input);
@@ -32,15 +31,15 @@ char** split_hosts(const char* input, int* count) {
     int n = 0;
 
     char* context = NULL;
-    char* token = strtok_s(copy, \" \\t\\n\\r,\", &context);
+    // 使用 strtok_s 进行安全分割
+    char* token = strtok_s(copy, " \t\n\r,", &context);
     while (token) {
         if (n >= capacity) {
             capacity *= 2;
             list = (char**)realloc(list, sizeof(char*) * capacity);
         }
-        // 简单去重逻辑略，此处直接添加
         list[n++] = _strdup(token);
-        token = strtok_s(NULL, \" \\t\\n\\r,\", &context);
+        token = strtok_s(NULL, " \t\n\r,", &context);
     }
     
     free(copy);
@@ -53,7 +52,7 @@ void free_string_list(char** list, int count) {
     free(list);
 }
 
-// 解析端口字符串 \"80, 443, 8080-8085\"
+// 解析端口字符串 "80, 443, 8080-8085"
 int* parse_ports(const char* portStr, int* count) {
     if (!portStr) { *count = 0; return NULL; }
     
@@ -62,19 +61,19 @@ int* parse_ports(const char* portStr, int* count) {
     
     char* copy = _strdup(portStr);
     char* context = NULL;
-    char* token = strtok_s(copy, \",\", &context);
+    char* token = strtok_s(copy, ",", &context);
     
     while (token) {
         if (strchr(token, '-')) {
             int start, end;
-            if (sscanf_s(token, \"%d-%d\", &start, &end) == 2) {
+            if (sscanf_s(token, "%d-%d", &start, &end) == 2) {
                 for (int i = start; i <= end; i++) ports[n++] = i;
             }
         } else {
             int p = atoi(token);
             if (p > 0) ports[n++] = p;
         }
-        token = strtok_s(NULL, \",\", &context);
+        token = strtok_s(NULL, ",", &context);
     }
     free(copy);
     *count = n;
@@ -83,11 +82,9 @@ int* parse_ports(const char* portStr, int* count) {
 
 // 辅助：发送结果到 UI
 void post_result(HWND hwnd, const char* col1, const char* col2, const char* col3, const char* col4, const char* col5) {
-    // 格式化为 CSV 风格字符串传递给 UI 拆解，或者使用特定结构体
-    // 这里为了简单，拼成 \"col1|col2|col3...\"
     char buffer[1024];
-    snprintf(buffer, sizeof(buffer), \"%s|%s|%s|%s|%s\", 
-             col1 ? col1 : \"\", col2 ? col2 : \"\", col3 ? col3 : \"\", col4 ? col4 : \"\", col5 ? col5 : \"\");
+    snprintf(buffer, sizeof(buffer), "%s|%s|%s|%s|%s", 
+             col1 ? col1 : "", col2 ? col2 : "", col3 ? col3 : "", col4 ? col4 : "", col5 ? col5 : "");
     
     char* msg = _strdup(buffer);
     PostMessage(hwnd, WM_USER_RESULT, 0, (LPARAM)msg);
@@ -110,19 +107,19 @@ unsigned int __stdcall thread_ping(void* arg) {
     
     HANDLE hIcmp = IcmpCreateFile();
     if (hIcmp == INVALID_HANDLE_VALUE) {
-        post_finish(p->hwndNotify, \"错误: 无法创建 ICMP 句柄\");
+        post_finish(p->hwndNotify, "错误: 无法创建 ICMP 句柄");
         free_string_list(hosts, count);
         free_thread_params(p);
         return 0;
     }
 
-    char sendData[] = \"NetToolPing\";
+    char sendData[] = "NetToolPing";
     DWORD replySize = sizeof(ICMP_ECHO_REPLY) + sizeof(sendData);
     void* replyBuffer = malloc(replySize);
 
     for (int i = 0; i < count; i++) {
         char statusMsg[256];
-        snprintf(statusMsg, sizeof(statusMsg), \"正在 Ping (%d/%d): %s...\", i + 1, count, hosts[i]);
+        snprintf(statusMsg, sizeof(statusMsg), "正在 Ping (%d/%d): %s...", i + 1, count, hosts[i]);
         post_log(p->hwndNotify, (i * 100) / count, statusMsg);
 
         unsigned long ip = inet_addr(hosts[i]);
@@ -131,7 +128,7 @@ unsigned int __stdcall thread_ping(void* arg) {
             if (he) {
                 ip = *(unsigned long*)he->h_addr_list[0];
             } else {
-                post_result(p->hwndNotify, hosts[i], \"无效地址\", \"N/A\", \"100\", \"N/A\");
+                post_result(p->hwndNotify, hosts[i], "无效地址", "N/A", "100", "N/A");
                 continue;
             }
         }
@@ -155,12 +152,12 @@ unsigned int __stdcall thread_ping(void* arg) {
 
         char rttStr[32], lossStr[32], ttlStr[32];
         if (success > 0) {
-            snprintf(rttStr, 32, \"%.2f\", (double)totalRtt / success);
-            snprintf(lossStr, 32, \"%.0f\", (double)(p->retryCount - success) / p->retryCount * 100.0);
-            snprintf(ttlStr, 32, \"%d\", lastTtl);
-            post_result(p->hwndNotify, hosts[i], \"在线\", rttStr, lossStr, ttlStr);
+            snprintf(rttStr, 32, "%.2f", (double)totalRtt / success);
+            snprintf(lossStr, 32, "%.0f", (double)(p->retryCount - success) / p->retryCount * 100.0);
+            snprintf(ttlStr, 32, "%d", lastTtl);
+            post_result(p->hwndNotify, hosts[i], "在线", rttStr, lossStr, ttlStr);
         } else {
-            post_result(p->hwndNotify, hosts[i], \"超时\", \"N/A\", \"100\", \"N/A\");
+            post_result(p->hwndNotify, hosts[i], "超时", "N/A", "100", "N/A");
         }
     }
 
@@ -169,7 +166,7 @@ unsigned int __stdcall thread_ping(void* arg) {
     free_string_list(hosts, count);
     free_thread_params(p);
     
-    post_finish(p->hwndNotify, \"批量 Ping 任务完成。\");
+    post_finish(p->hwndNotify, "批量 Ping 任务完成。");
     return 0;
 }
 
@@ -188,7 +185,7 @@ unsigned int __stdcall thread_port_scan(void* arg) {
             current++;
             int port = ports[j];
             char msg[256];
-            snprintf(msg, sizeof(msg), \"扫描 (%d/%d): %s:%d\", current, total, hosts[i], port);
+            snprintf(msg, sizeof(msg), "扫描 (%d/%d): %s:%d", current, total, hosts[i], port);
             post_log(p->hwndNotify, (current * 100) / (total ? total : 1), msg);
 
             SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -223,12 +220,11 @@ unsigned int __stdcall thread_port_scan(void* arg) {
 
             int ret = select(0, NULL, &writeFds, NULL, &tv);
             char portStr[16];
-            snprintf(portStr, sizeof(portStr), \"%d\", port);
+            snprintf(portStr, sizeof(portStr), "%d", port);
 
             if (ret > 0) {
-                post_result(p->hwndNotify, hosts[i], portStr, \"开放 (Open)\", \"\", \"\");
+                post_result(p->hwndNotify, hosts[i], portStr, "开放 (Open)", "", "");
             } 
-            // 仅显示开放的端口，或者在此处扩展显示关闭的
 
             closesocket(sock);
         }
@@ -237,18 +233,17 @@ unsigned int __stdcall thread_port_scan(void* arg) {
     free_string_list(hosts, hostCount);
     free(ports);
     free_thread_params(p);
-    post_finish(p->hwndNotify, \"批量端口扫描完成。\");
+    post_finish(p->hwndNotify, "批量端口扫描完成。");
     return 0;
 }
 
 // --- 提取 IP 任务 ---
-// 简单的纯C实现：查找数字.数字.数字.数字
 unsigned int __stdcall thread_extract_ip(void* arg) {
     ThreadParams* p = (ThreadParams*)arg;
     char* content = p->targetInput;
     int len = strlen(content);
     
-    post_log(p->hwndNotify, 0, \"正在分析文本...\");
+    post_log(p->hwndNotify, 0, "正在分析文本...");
 
     char currentIp[16] = {0};
     int idx = 0;
@@ -267,18 +262,15 @@ unsigned int __stdcall thread_extract_ip(void* arg) {
                 dots++;
                 lastCharWasDigit = 0;
             } else {
-                // Invalid sequence, reset
                 idx = 0; dots = 0;
             }
         } else {
-            // End of potential IP
             if (dots == 3 && lastCharWasDigit && idx >= 7) {
-                currentIp[idx] = '\\0';
-                // Validate ranges
+                currentIp[idx] = '\0';
                 int parts[4];
-                if (sscanf_s(currentIp, \"%d.%d.%d.%d\", &parts[0], &parts[1], &parts[2], &parts[3]) == 4) {
+                if (sscanf_s(currentIp, "%d.%d.%d.%d", &parts[0], &parts[1], &parts[2], &parts[3]) == 4) {
                     if (parts[0]<=255 && parts[1]<=255 && parts[2]<=255 && parts[3]<=255) {
-                        post_result(p->hwndNotify, currentIp, \"\", \"\", \"\", \"\");
+                        post_result(p->hwndNotify, currentIp, "", "", "", "");
                     }
                 }
             }
@@ -287,13 +279,13 @@ unsigned int __stdcall thread_extract_ip(void* arg) {
     }
 
     free_thread_params(p);
-    post_finish(p->hwndNotify, \"IP 提取完成。\");
+    post_finish(p->hwndNotify, "IP 提取完成。");
     return 0;
 }
 
 // --- 单个扫描 (简化复用端口扫描逻辑) ---
 unsigned int __stdcall thread_single_scan(void* arg) {
-    return thread_port_scan(arg); // 逻辑基本一致，只是输入只有一个IP
+    return thread_port_scan(arg); 
 }
 
 void free_thread_params(ThreadParams* params) {
@@ -307,7 +299,7 @@ void free_thread_params(ThreadParams* params) {
 // --- 代理管理 ---
 HKEY open_internet_settings(REGSAM access) {
     HKEY hKey;
-    if (RegOpenKeyExA(HKEY_CURRENT_USER, \"Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Internet Settings\", 0, access, &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings", 0, access, &hKey) == ERROR_SUCCESS) {
         return hKey;
     }
     return NULL;
@@ -315,10 +307,10 @@ HKEY open_internet_settings(REGSAM access) {
 
 void refresh_internet_settings() {
     // 动态加载 Wininet 以避免链接问题
-    HMODULE hWininet = LoadLibraryA(\"wininet.dll\");
+    HMODULE hWininet = LoadLibraryA("wininet.dll");
     if (hWininet) {
         typedef BOOL (WINAPI *ISO)(HINTERNET, DWORD, LPVOID, DWORD);
-        ISO pInternetSetOption = (ISO)GetProcAddress(hWininet, \"InternetSetOptionA\");
+        ISO pInternetSetOption = (ISO)GetProcAddress(hWininet, "InternetSetOptionA");
         if (pInternetSetOption) {
             pInternetSetOption(NULL, 39, NULL, 0); // INTERNET_OPTION_SETTINGS_CHANGED
             pInternetSetOption(NULL, 37, NULL, 0); // INTERNET_OPTION_REFRESH
@@ -332,9 +324,9 @@ void proxy_init_backup() {
     HKEY hKey = open_internet_settings(KEY_READ);
     if (hKey) {
         DWORD size = sizeof(DWORD);
-        RegQueryValueExA(hKey, \"ProxyEnable\", NULL, NULL, (LPBYTE)&g_originalProxyEnable, &size);
+        RegQueryValueExA(hKey, "ProxyEnable", NULL, NULL, (LPBYTE)&g_originalProxyEnable, &size);
         size = sizeof(g_originalProxyServer);
-        RegQueryValueExA(hKey, \"ProxyServer\", NULL, NULL, (LPBYTE)g_originalProxyServer, &size);
+        RegQueryValueExA(hKey, "ProxyServer", NULL, NULL, (LPBYTE)g_originalProxyServer, &size);
         g_hasBackup = 1;
         RegCloseKey(hKey);
     }
@@ -347,10 +339,10 @@ int proxy_set_system(const char* ip, int port) {
 
     DWORD enable = 1;
     char server[128];
-    snprintf(server, sizeof(server), \"%s:%d\", ip, port);
+    snprintf(server, sizeof(server), "%s:%d", ip, port);
 
-    RegSetValueExA(hKey, \"ProxyEnable\", 0, REG_DWORD, (BYTE*)&enable, sizeof(enable));
-    RegSetValueExA(hKey, \"ProxyServer\", 0, REG_SZ, (BYTE*)server, strlen(server) + 1);
+    RegSetValueExA(hKey, "ProxyEnable", 0, REG_DWORD, (BYTE*)&enable, sizeof(enable));
+    RegSetValueExA(hKey, "ProxyServer", 0, REG_SZ, (BYTE*)server, strlen(server) + 1);
     
     RegCloseKey(hKey);
     refresh_internet_settings();
@@ -362,12 +354,11 @@ int proxy_unset_system() {
     HKEY hKey = open_internet_settings(KEY_WRITE);
     if (!hKey) return 0;
 
-    RegSetValueExA(hKey, \"ProxyEnable\", 0, REG_DWORD, (BYTE*)&g_originalProxyEnable, sizeof(DWORD));
-    RegSetValueExA(hKey, \"ProxyServer\", 0, REG_SZ, (BYTE*)g_originalProxyServer, strlen(g_originalProxyServer) + 1);
+    RegSetValueExA(hKey, "ProxyEnable", 0, REG_DWORD, (BYTE*)&g_originalProxyEnable, sizeof(DWORD));
+    RegSetValueExA(hKey, "ProxyServer", 0, REG_SZ, (BYTE*)g_originalProxyServer, strlen(g_originalProxyServer) + 1);
 
     RegCloseKey(hKey);
     refresh_internet_settings();
     g_hasBackup = 0;
     return 1;
 }
-
