@@ -1,56 +1,40 @@
-cmake_minimum_required(VERSION 3.16)
 
-project(NetToolPro VERSION 3.7 LANGUAGES CXX)
+fullContent: "cmake_minimum_required(VERSION 3.16)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+project(NetToolProC VERSION 3.7 LANGUAGES C)
 
-# --- 修改点 1: 查找 Qt5 而不是 Qt6 ---
-find_package(Qt5 REQUIRED COMPONENTS Widgets Network Core)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
 
-set(PROJECT_RESOURCES
-    resources/resources.qrc
-)
-
-set(WIN_RC_FILE "")
-if(WIN32)
-    set(WIN_RC_FILE resources/NetToolPro.rc)
-endif()
-
+# 包含源文件
 set(PROJECT_SOURCES
-    src/main.cpp
-    src/MainWindow.cpp
-    src/WorkerThreads.cpp
-    src/ProxyManager.cpp
-    ${PROJECT_RESOURCES}
-    ${WIN_RC_FILE}
+    src/main.c
+    src/network_tools.c
 )
 
 set(PROJECT_HEADERS
-    src/MainWindow.h
-    src/WorkerThreads.h
-    src/ProxyManager.h
+    src/network_tools.h
 )
 
-if(WIN32)
-    list(APPEND SYSTEM_LIBS Iphlpapi Ws2_32 Advapi32 Wininet)
+# 资源文件 (如果有 .rc 文件可以添加)
+if(EXISTS \"${CMAKE_SOURCE_DIR}/resources/NetToolPro.rc\")
+    list(APPEND PROJECT_SOURCES resources/NetToolPro.rc)
 endif()
 
-add_executable(NetToolPro WIN32
-    ${PROJECT_SOURCES}
-    ${PROJECT_HEADERS}
-)
+add_executable(NetToolPro ${PROJECT_SOURCES} ${PROJECT_HEADERS})
 
-# --- 修改点 2: 链接 Qt5 库 ---
-target_link_libraries(NetToolPro PRIVATE
-    Qt5::Widgets
-    Qt5::Network
-    Qt5::Core
-    ${SYSTEM_LIBS}
-)
-
-# Qt5 需要手动开启这些
-set_property(TARGET NetToolPro PROPERTY CXX_STANDARD 17)
-set_property(TARGET NetToolPro PROPERTY AUTOMOC ON)
-set_property(TARGET NetToolPro PROPERTY AUTOUIC ON)
-set_property(TARGET NetToolPro PROPERTY AUTORCC ON)
+# 链接 Windows 系统库
+if(WIN32)
+    target_link_libraries(NetToolPro PRIVATE
+        ws2_32
+        iphlpapi
+        comctl32
+        gdi32
+        user32
+        kernel32
+        advapi32
+        wininet
+    )
+    # 设置为 Windows GUI 子系统 (去除控制台窗口)
+    set_target_properties(NetToolPro PROPERTIES WIN32_EXECUTABLE ON)
+endif()"
