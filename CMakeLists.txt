@@ -1,3 +1,5 @@
+cmake_minimum_required(VERSION 3.16)
+
 project(NetToolProC VERSION 3.7 LANGUAGES C)
 
 set(CMAKE_C_STANDARD 11)
@@ -13,8 +15,8 @@ set(PROJECT_HEADERS
     src/network_tools.h
 )
 
-# 资源文件 (如果有 .rc 文件可以添加)
-if(EXISTS \"${CMAKE_SOURCE_DIR}/resources/NetToolPro.rc\")
+# 资源文件 (如果有 .rc 文件则添加)
+if(EXISTS "${CMAKE_SOURCE_DIR}/resources/NetToolPro.rc")
     list(APPEND PROJECT_SOURCES resources/NetToolPro.rc)
 endif()
 
