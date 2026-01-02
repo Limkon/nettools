@@ -433,7 +433,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     RegisterClassExW(&wc);
 
     hMainWnd = CreateWindowExW(WS_EX_ACCEPTFILES, 
-        L"NetToolProClass", L"多功能网络工具 (C语言重构版 - Unicode)", 
+        L"NetToolProClass", L"多功能网络工具", 
         WS_OVERLAPPEDWINDOW, 
         CW_USEDEFAULT, CW_USEDEFAULT, 920, 750, NULL, NULL, hInstance, NULL);
 
