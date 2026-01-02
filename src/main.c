@@ -29,26 +29,26 @@
 #define ID_STATUS_BAR       114
 #define ID_BTN_EXPORT       115
 
+// 全局变量
 HINSTANCE hInst;
 HWND hMainWnd, hList, hStatus;
 HWND hEditFile, hEditText, hEditTimeout, hEditCount, hEditPorts;
 HWND hEditSingleIp, hEditSinglePort;
 HWND hBtnProxy;
 int isProxySet = 0;
-HFONT hSystemFont = NULL; // 全局系统字体
+
+// [MandalaECH] 全局字体句柄
+HFONT hAppFont = NULL;
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
-// 获取系统默认界面字体 (解决字体乱码/丑陋问题)
-HFONT GetSystemGuiFont() {
-    NONCLIENTMETRICSW ncm;
-    ncm.cbSize = sizeof(NONCLIENTMETRICSW);
-    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICSW), &ncm, 0)) {
-        return CreateFontIndirectW(&ncm.lfMessageFont);
-    }
-    return (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+// [MandalaECH] 字体设置回调
+BOOL CALLBACK EnumSetFont(HWND hWnd, LPARAM lParam) {
+    SendMessageW(hWnd, WM_SETFONT, (WPARAM)lParam, TRUE);
+    return TRUE;
 }
 
+// 获取宽字符文本
 wchar_t* get_alloc_text(HWND hwnd) {
     int len = GetWindowTextLengthW(hwnd);
     if (len == 0) return _wcsdup(L"");
@@ -146,8 +146,9 @@ void start_task(TaskType type) {
                 int wlen = MultiByteToWideChar(CP_UTF8, 0, buffer, -1, NULL, 0);
                 if (wlen == 0) wlen = MultiByteToWideChar(CP_ACP, 0, buffer, -1, NULL, 0);
                 
-                p->targetInput = (wchar_t*)malloc(wlen * sizeof(wchar_t));
+                p->targetInput = (wchar_t*)malloc((wlen + 1) * sizeof(wchar_t));
                 MultiByteToWideChar(CP_UTF8, 0, buffer, -1, p->targetInput, wlen);
+                p->targetInput[wlen] = 0;
                 free(buffer);
             } else {
                 p->targetInput = _wcsdup(L"");
@@ -200,7 +201,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
     WSAStartup(MAKEWORD(2,2), &wsa);
     InitCommonControls(); 
 
-    WNDCLASSEXW wc = {0};
+    // [MandalaECH] 优先获取系统原生界面字体
+    NONCLIENTMETRICSW ncm = { sizeof(NONCLIENTMETRICSW) };
+    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICSW), &ncm, 0)) {
+        hAppFont = CreateFontIndirectW(&ncm.lfMenuFont);
+    } else {
+        hAppFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei");
+    }
+
+    WNDCLASSW wc = {0};
     wc.cbSize = sizeof(WNDCLASSEX);
     wc.style = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc = WndProc;
@@ -225,7 +234,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
         DispatchMessage(&msg);
     }
 
-    if (hSystemFont) DeleteObject(hSystemFont);
+    if (hAppFont) DeleteObject(hAppFont);
     WSACleanup();
     return (int)msg.wParam;
 }
@@ -234,9 +243,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     switch (message) {
     case WM_CREATE:
         {
-            // 获取系统字体
-            hSystemFont = GetSystemGuiFont();
-
             int grp1Y = 10;
             CreateWindowW(L"BUTTON", L"批量任务设置", WS_CHILD|WS_VISIBLE|BS_GROUPBOX, 10, grp1Y, 880, 230, hWnd, NULL, hInst, NULL);
             
@@ -285,8 +291,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             
             hStatus = CreateWindowExW(0, STATUSCLASSNAMEW, L"就绪 - 支持拖拽文件输入", WS_CHILD|WS_VISIBLE|SBARS_SIZEGRIP, 0, 0, 0, 0, hWnd, (HMENU)ID_STATUS_BAR, hInst, NULL);
 
-            // 应用字体到所有控件
-            EnumChildWindows(hWnd, (WNDENUMPROC)(void(*)(HWND,LPARAM))SendMessageW, (LPARAM)hSystemFont);
+            // [MandalaECH] 统一应用字体
+            EnumChildWindows(hWnd, EnumSetFont, (LPARAM)hAppFont);
         }
         break;
 
@@ -403,7 +409,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
 
     case WM_DESTROY:
         if (isProxySet) proxy_unset_system();
-        if (hSystemFont) DeleteObject(hSystemFont);
         PostQuitMessage(0);
         break;
 
