@@ -1,29 +1,85 @@
-name: Windows Build
+name: Windows Build (Split Workflow)
 
-# 修改为手动触发 (Workflow Dispatch)
 on: workflow_dispatch
 
-jobs:
-  build:
-    runs-on: windows-latest
+env:
+  QT_VERSION: '6.5.0'
+  QT_ARCH: 'win64_msvc2019_64'
+  # 定义 Qt 安装目录，确保两个 Job 都能访问到 (runner.workspace 位于项目目录上层)
+  QT_INSTALL_DIR: '${{ github.workspace }}/../Qt'
 
+jobs:
+  # --- 第一阶段：下载并缓存依赖 (Qt) ---
+  prepare-dependencies:
+    runs-on: windows-latest
+    steps:
+      - name: Compute Cache Key
+        id: cache-key
+        shell: powershell
+        run: |
+          echo "key=qt-${{ env.QT_VERSION }}-${{ env.QT_ARCH }}" >> $env:GITHUB_OUTPUT
+
+      - name: Restore Qt Cache
+        id: cache-qt
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.QT_INSTALL_DIR }}
+          key: ${{ steps.cache-key.outputs.key }}
+
+      - name: Install Qt (If Cache Miss)
+        if: steps.cache-qt.outputs.cache-hit != 'true'
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: 'windows'
+          target: 'desktop'
+          arch: ${{ env.QT_ARCH }}
+          dir: ${{ env.QT_INSTALL_DIR }}
+          # 禁用 action 自身的缓存，因为我们使用 actions/cache 缓存整个目录
+          cache: 'false'
+          # 只安装，不设置环境变量，我们在构建阶段手动设置
+          setup-python: 'false' 
+
+  # --- 第二阶段：构建项目 ---
+  build-application:
+    needs: prepare-dependencies
+    runs-on: windows-latest
+    
     steps:
     - uses: actions/checkout@v3
 
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v3
-      with:
-        version: '6.5.0'
-        host: 'windows'
-        target: 'desktop'
-        arch: 'win64_msvc2019_64'
+    # 1. 恢复之前缓存的 Qt 目录
+    - name: Compute Cache Key
+      id: cache-key
+      shell: powershell
+      run: |
+        echo "key=qt-${{ env.QT_VERSION }}-${{ env.QT_ARCH }}" >> $env:GITHUB_OUTPUT
 
+    - name: Restore Qt Cache
+      uses: actions/cache@v3
+      with:
+        path: ${{ env.QT_INSTALL_DIR }}
+        key: ${{ steps.cache-key.outputs.key }}
+        fail-on-cache-miss: true # 如果依赖没准备好，直接报错
+
+    # 2. 手动配置 Qt 环境变量 (因为我们是从缓存恢复文件的，不是现场安装的)
+    - name: Setup Qt Environment
+      shell: powershell
+      run: |
+        $qtPath = "${{ env.QT_INSTALL_DIR }}\Qt\${{ env.QT_VERSION }}\msvc2019_64"
+        echo "Qt6_DIR=$qtPath" >> $env:GITHUB_ENV
+        echo "CMAKE_PREFIX_PATH=$qtPath" >> $env:GITHUB_ENV
+        echo "$qtPath\bin" >> $env:GITHUB_PATH
+
+    # 3. 配置构建 (开启 CMake 构建缓存)
     - name: Configure CMake
       run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 
+    # 4. 执行构建
     - name: Build
       run: cmake --build build --config Release
 
+    # 5. 上传产物
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
