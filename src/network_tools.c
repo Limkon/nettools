@@ -142,9 +142,12 @@ unsigned int __stdcall thread_ping(void* arg) {
     int count;
     wchar_t** hosts = split_hosts(p->targetInput, &count);
     
+    // [Fix] 保存窗口句柄，防止后续 free(p) 后无法访问
+    HWND hwnd = p->hwndNotify; 
+    
     HANDLE hIcmp = IcmpCreateFile();
     if (hIcmp == INVALID_HANDLE_VALUE) {
-        post_finish(p->hwndNotify, L"错误: 无法创建 ICMP 句柄");
+        post_finish(hwnd, L"错误: 无法创建 ICMP 句柄");
         free_string_list(hosts, count);
         free_thread_params(p);
         return 0;
@@ -156,11 +159,11 @@ unsigned int __stdcall thread_ping(void* arg) {
 
     for (int i = 0; i < count; i++) {
         // [Stop Check]
-        if (g_stopSignal) { post_log(p->hwndNotify, 0, L"任务已中止"); break; }
+        if (g_stopSignal) { post_log(hwnd, 0, L"任务已中止"); break; }
 
         wchar_t statusMsg[256];
         swprintf_s(statusMsg, 256, L"正在 Ping (%d/%d): %s...", i + 1, count, hosts[i]);
-        post_log(p->hwndNotify, (i * 100) / count, statusMsg);
+        post_log(hwnd, (i * 100) / count, statusMsg);
 
         char* ansiHost = wide_to_ansi(hosts[i]);
         unsigned long ip = inet_addr(ansiHost);
@@ -169,7 +172,7 @@ unsigned int __stdcall thread_ping(void* arg) {
             if (he) {
                 ip = *(unsigned long*)he->h_addr_list[0];
             } else {
-                post_result(p->hwndNotify, hosts[i], L"无效地址", L"N/A", L"100", L"N/A");
+                post_result(hwnd, hosts[i], L"无效地址", L"N/A", L"100", L"N/A");
                 free(ansiHost);
                 continue;
             }
@@ -202,19 +205,21 @@ unsigned int __stdcall thread_ping(void* arg) {
             swprintf_s(rttStr, 32, L"%.2f", (double)totalRtt / success);
             swprintf_s(lossStr, 32, L"%.0f", (double)(p->retryCount - success) / p->retryCount * 100.0);
             swprintf_s(ttlStr, 32, L"%d", lastTtl);
-            post_result(p->hwndNotify, hosts[i], L"在线", rttStr, lossStr, ttlStr);
+            post_result(hwnd, hosts[i], L"在线", rttStr, lossStr, ttlStr);
         } else {
-            post_result(p->hwndNotify, hosts[i], L"超时", L"N/A", L"100", L"N/A");
+            post_result(hwnd, hosts[i], L"超时", L"N/A", L"100", L"N/A");
         }
     }
 
     free(replyBuffer);
     IcmpCloseHandle(hIcmp);
     free_string_list(hosts, count);
+    
+    // [Fix] 先释放参数，但使用已保存的 hwnd 发送消息
     free_thread_params(p);
     
-    if (g_stopSignal) post_finish(p->hwndNotify, L"任务已由用户中止。");
-    else post_finish(p->hwndNotify, L"批量 Ping 任务完成。");
+    if (g_stopSignal) post_finish(hwnd, L"任务已由用户中止。");
+    else post_finish(hwnd, L"批量 Ping 任务完成。");
     return 0;
 }
 
@@ -223,6 +228,9 @@ unsigned int __stdcall thread_port_scan(void* arg) {
     int hostCount, portCount;
     wchar_t** hosts = split_hosts(p->targetInput, &hostCount);
     int* ports = parse_ports(p->portsInput, &portCount);
+    
+    // [Fix] 保存窗口句柄
+    HWND hwnd = p->hwndNotify;
 
     int total = hostCount * portCount;
     int current = 0;
@@ -239,7 +247,7 @@ unsigned int __stdcall thread_port_scan(void* arg) {
             int port = ports[j];
             wchar_t msg[256];
             swprintf_s(msg, 256, L"扫描 (%d/%d): %s:%d", current, total, hosts[i], port);
-            post_log(p->hwndNotify, (current * 100) / (total ? total : 1), msg);
+            post_log(hwnd, (current * 100) / (total ? total : 1), msg);
 
             SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
             if (sock == INVALID_SOCKET) continue;
@@ -274,7 +282,7 @@ unsigned int __stdcall thread_port_scan(void* arg) {
             swprintf_s(portStr, 16, L"%d", port);
 
             if (ret > 0) {
-                post_result(p->hwndNotify, hosts[i], portStr, L"开放 (Open)", L"", L"");
+                post_result(hwnd, hosts[i], portStr, L"开放 (Open)", L"", L"");
             } 
 
             closesocket(sock);
@@ -284,19 +292,24 @@ unsigned int __stdcall thread_port_scan(void* arg) {
 
     free_string_list(hosts, hostCount);
     free(ports);
+    
+    // [Fix] 使用保存的句柄
     free_thread_params(p);
     
-    if (g_stopSignal) post_finish(p->hwndNotify, L"任务已由用户中止。");
-    else post_finish(p->hwndNotify, L"批量端口扫描完成。");
+    if (g_stopSignal) post_finish(hwnd, L"任务已由用户中止。");
+    else post_finish(hwnd, L"批量端口扫描完成。");
     return 0;
 }
 
 unsigned int __stdcall thread_extract_ip(void* arg) {
     ThreadParams* p = (ThreadParams*)arg;
+    
+    // [Fix] 保存窗口句柄
+    HWND hwnd = p->hwndNotify;
     wchar_t* content = p->targetInput;
     size_t len = wcslen(content);
     
-    post_log(p->hwndNotify, 0, L"正在分析文本...");
+    post_log(hwnd, 0, L"正在分析文本...");
 
     wchar_t currentIp[16] = {0};
     int idx = 0;
@@ -324,7 +337,7 @@ unsigned int __stdcall thread_extract_ip(void* arg) {
                 int parts[4];
                 if (swscanf_s(currentIp, L"%d.%d.%d.%d", &parts[0], &parts[1], &parts[2], &parts[3]) == 4) {
                     if (parts[0]<=255 && parts[1]<=255 && parts[2]<=255 && parts[3]<=255) {
-                        post_result(p->hwndNotify, currentIp, L"", L"", L"", L"");
+                        post_result(hwnd, currentIp, L"", L"", L"", L"");
                     }
                 }
             }
@@ -333,8 +346,9 @@ unsigned int __stdcall thread_extract_ip(void* arg) {
     }
 
     free_thread_params(p);
-    if (g_stopSignal) post_finish(p->hwndNotify, L"任务已由用户中止。");
-    else post_finish(p->hwndNotify, L"IP 提取完成。");
+    
+    if (g_stopSignal) post_finish(hwnd, L"任务已由用户中止。");
+    else post_finish(hwnd, L"IP 提取完成。");
     return 0;
 }
 
