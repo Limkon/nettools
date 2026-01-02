@@ -3,12 +3,11 @@
 #include <commctrl.h>
 #include <stdio.h>
 #include <shlobj.h>
-#include <stdlib.h> // for _wtof, _wtoi
-#include <wchar.h>  // for wcsstr, wcscmp
+#include <stdlib.h> 
+#include <wchar.h>
 
 #pragma comment(lib, "comctl32.lib")
 
-// === 核心修复：强制启用 Windows 现代视觉样式 (Common Controls v6) ===
 #pragma comment(linker,"/manifestdependency:\"type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 // --- 控件 ID 定义 ---
@@ -35,6 +34,9 @@
 #define ID_STATUS_BAR       114
 #define ID_BTN_EXPORT       115
 
+// [新增] IP归属地复选框
+#define ID_CHECK_LOCATION   118
+
 // 右键菜单 ID
 #define IDM_COPY            201
 #define IDM_SELECT_ALL      202
@@ -50,13 +52,11 @@ int isProxySet = 0;
 HFONT hSystemFont = NULL; 
 TaskType g_currentTask = 0; 
 
-// 排序相关全局变量
 int g_sortColumn = -1;      
 BOOL g_sortAscending = TRUE; 
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
-// 启用高 DPI 感知
 void EnableDPIAwareness() {
     HMODULE hUser32 = GetModuleHandleW(L"user32.dll");
     if (hUser32) {
@@ -66,13 +66,11 @@ void EnableDPIAwareness() {
     }
 }
 
-// [Fix] 明确创建标准字体
 HFONT GetFixedSystemFont() {
     HDC hdc = GetDC(NULL);
     int logPixelsY = GetDeviceCaps(hdc, LOGPIXELSY);
     ReleaseDC(NULL, hdc);
     int height = -MulDiv(9, logPixelsY, 72); 
-
     return CreateFontW(height, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, 
                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, 
                       DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Microsoft YaHei UI");
@@ -91,6 +89,7 @@ wchar_t* get_alloc_text(HWND hwnd) {
     return buf;
 }
 
+// [修改] 解析更多列
 void add_list_row(const wchar_t* pipedData) {
     wchar_t* copy = _wcsdup(pipedData);
     wchar_t* ctx;
@@ -106,12 +105,13 @@ void add_list_row(const wchar_t* pipedData) {
     
     int col = 1;
     while ((token = wcstok_s(NULL, L"|", &ctx))) {
-        ListView_SetItemText(hList, lvItem.iItem, col++, token);
+        // [修改] 如果 token 是占位符 "-", 显示为空
+        if (wcscmp(token, L"-") == 0) ListView_SetItemText(hList, lvItem.iItem, col++, L"");
+        else ListView_SetItemText(hList, lvItem.iItem, col++, token);
     }
     free(copy);
 }
 
-// 列表排序比较回调函数
 int CALLBACK CompareListViewItems(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort) {
     int col = (int)lParamSort; 
     
@@ -122,7 +122,6 @@ int CALLBACK CompareListViewItems(LPARAM lParam1, LPARAM lParam2, LPARAM lParamS
     int result = 0;
     int isNumeric = 0;
 
-    // 判断是否需要按数值排序
     if (g_currentTask == TASK_PING && (col == 2 || col == 3 || col == 4)) {
         isNumeric = 1;
     }
@@ -267,6 +266,9 @@ void start_task(TaskType type) {
     p->retryCount = GetDlgItemInt(hMainWnd, ID_EDIT_COUNT, NULL, FALSE);
     p->timeoutMs = GetDlgItemInt(hMainWnd, ID_EDIT_TIMEOUT, NULL, FALSE);
     
+    // [New] 获取归属地复选框状态
+    p->showLocation = (IsDlgButtonChecked(hMainWnd, ID_CHECK_LOCATION) == BST_CHECKED);
+
     if (type == TASK_SINGLE_SCAN) {
         p->targetInput = get_alloc_text(hEditSingleIp); 
         p->portsInput = get_alloc_text(hEditSinglePort);
@@ -303,32 +305,51 @@ void start_task(TaskType type) {
     while(ListView_DeleteColumn(hList, 0));
 
     if (type == TASK_PING) {
+        // [修改] 动态增加归属地列
+        int colIdx = 0;
         wchar_t* cols[] = {L"目标地址", L"状态", L"平均延迟(ms)", L"丢包率(%)", L"TTL"};
         for(int i=0; i<5; i++) {
             LVCOLUMNW lvc = {0}; lvc.mask = LVCF_TEXT | LVCF_WIDTH; lvc.pszText = cols[i]; lvc.cx = (i==0?180:100);
-            ListView_InsertColumn(hList, i, &lvc);
+            ListView_InsertColumn(hList, colIdx++, &lvc);
+        }
+        if (p->showLocation) {
+            LVCOLUMNW lvc = {0}; lvc.mask = LVCF_TEXT | LVCF_WIDTH; lvc.pszText = L"归属地"; lvc.cx = 200;
+            ListView_InsertColumn(hList, colIdx++, &lvc);
         }
         _beginthreadex(NULL, 0, thread_ping, p, 0, NULL);
     } 
     else if (type == TASK_SCAN) {
+        int colIdx = 0;
         wchar_t* cols[] = {L"目标地址", L"端口", L"状态"};
         for(int i=0; i<3; i++) {
             LVCOLUMNW lvc = {0}; lvc.mask = LVCF_TEXT | LVCF_WIDTH; lvc.pszText = cols[i]; lvc.cx = (i==0?200:100);
-            ListView_InsertColumn(hList, i, &lvc);
+            ListView_InsertColumn(hList, colIdx++, &lvc);
+        }
+        if (p->showLocation) {
+            LVCOLUMNW lvc = {0}; lvc.mask = LVCF_TEXT | LVCF_WIDTH; lvc.pszText = L"归属地"; lvc.cx = 200;
+            ListView_InsertColumn(hList, colIdx++, &lvc);
         }
         _beginthreadex(NULL, 0, thread_port_scan, p, 0, NULL);
     } 
     else if (type == TASK_EXTRACT) {
-        wchar_t* cols[] = {L"提取到的IP地址"};
-        LVCOLUMNW lvc = {0}; lvc.mask = LVCF_TEXT|LVCF_WIDTH; lvc.pszText = cols[0]; lvc.cx = 300;
+        LVCOLUMNW lvc = {0}; lvc.mask = LVCF_TEXT|LVCF_WIDTH; lvc.pszText = L"提取到的IP地址"; lvc.cx = 300;
         ListView_InsertColumn(hList, 0, &lvc);
+        if (p->showLocation) {
+            LVCOLUMNW lvc2 = {0}; lvc2.mask = LVCF_TEXT | LVCF_WIDTH; lvc2.pszText = L"归属地"; lvc2.cx = 200;
+            ListView_InsertColumn(hList, 1, &lvc2);
+        }
         _beginthreadex(NULL, 0, thread_extract_ip, p, 0, NULL);
     }
     else if (type == TASK_SINGLE_SCAN) {
+        int colIdx = 0;
         wchar_t* cols[] = {L"目标地址", L"开放端口", L"服务/备注"};
         for(int i=0; i<3; i++) {
             LVCOLUMNW lvc = {0}; lvc.mask = LVCF_TEXT|LVCF_WIDTH; lvc.pszText = cols[i]; lvc.cx = (i==0?150:100);
-            ListView_InsertColumn(hList, i, &lvc);
+            ListView_InsertColumn(hList, colIdx++, &lvc);
+        }
+        if (p->showLocation) {
+            LVCOLUMNW lvc = {0}; lvc.mask = LVCF_TEXT | LVCF_WIDTH; lvc.pszText = L"归属地"; lvc.cx = 200;
+            ListView_InsertColumn(hList, colIdx++, &lvc);
         }
         _beginthreadex(NULL, 0, thread_single_scan, p, 0, NULL);
     }
@@ -399,6 +420,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             CreateWindowW(L"STATIC", L"Ping次数:", WS_CHILD|WS_VISIBLE, 500, grp1Y+85, 90, 20, hWnd, NULL, hInst, NULL);
             hEditCount = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"5", WS_CHILD|WS_VISIBLE|ES_NUMBER, 600, grp1Y+83, 60, 23, hWnd, (HMENU)ID_EDIT_COUNT, hInst, NULL);
 
+            // [New] 增加 IP 归属地复选框
+            CreateWindowW(L"BUTTON", L"显示 IP 归属地 (需 qqwry.dat)", WS_CHILD|WS_VISIBLE|BS_AUTOCHECKBOX, 500, grp1Y+120, 200, 20, hWnd, (HMENU)ID_CHECK_LOCATION, hInst, NULL);
+            CheckDlgButton(hWnd, ID_CHECK_LOCATION, BST_CHECKED); // 默认勾选
+
             CreateWindowW(L"STATIC", L"批量扫描端口:", WS_CHILD|WS_VISIBLE, 30, grp1Y+160, 90, 20, hWnd, NULL, hInst, NULL);
             hEditPorts = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"80,443,8080,1433,3306,3389", WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL, 120, grp1Y+158, 750, 23, hWnd, (HMENU)ID_EDIT_PORTS, hInst, NULL);
 
@@ -429,7 +454,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 10, 340, 880, 320, hWnd, (HMENU)ID_LIST_RESULT, hInst, NULL);
             ListView_SetExtendedListViewStyle(hList, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
 
-            // [New] 导出按钮初始创建 (位置将在 WM_SIZE 中被立即重置)
             CreateWindowW(L"BUTTON", L"导出结果为 CSV", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 10, 670, 120, 25, hWnd, (HMENU)ID_BTN_EXPORT, hInst, NULL);
             
             hStatus = CreateWindowExW(0, STATUSCLASSNAMEW, L"就绪 - 支持拖拽文件输入", WS_CHILD|WS_VISIBLE|SBARS_SIZEGRIP, 0, 0, 0, 0, hWnd, (HMENU)ID_STATUS_BAR, hInst, NULL);
@@ -576,8 +600,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         {
             wchar_t* msg = (wchar_t*)lParam;
             SendMessageW(hStatus, SB_SETTEXTW, 0, (LPARAM)msg);
-            // [Fix] 取消弹窗，只在状态栏提示
-            // MessageBoxW(hWnd, msg, L"任务完成", MB_OK);
             free(msg);
         }
         break;
@@ -587,13 +609,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         RECT rc;
         GetClientRect(hWnd, &rc);
         
-        // 1. 获取状态栏高度
         RECT rcStatus;
         GetWindowRect(hStatus, &rcStatus);
         int statusHeight = rcStatus.bottom - rcStatus.top;
         if (statusHeight == 0) statusHeight = 25; 
 
-        // 2. 调整导出按钮位置到右下角 (状态栏上方)
         HWND hBtnExport = GetDlgItem(hWnd, ID_BTN_EXPORT);
         if (hBtnExport) {
             int btnW = 120;
@@ -604,11 +624,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             SetWindowPos(hBtnExport, NULL, x, y, btnW, btnH, SWP_NOZORDER);
         }
 
-        // 3. 调整列表大小，确保不覆盖底部按钮
         if (hList) {
-            int listBottomMargin = statusHeight + 35; // 预留给按钮和状态栏的空间
+            int listBottomMargin = statusHeight + 35; 
             int listH = rc.bottom - 340 - listBottomMargin;
-            if (listH < 100) listH = 100; // 最小高度保护
+            if (listH < 100) listH = 100; 
             SetWindowPos(hList, NULL, 0, 0, rc.right - 20, listH, SWP_NOMOVE | SWP_NOZORDER);
         }
         break;
