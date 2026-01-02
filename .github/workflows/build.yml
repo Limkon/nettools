@@ -19,9 +19,10 @@ jobs:
         run: |
           echo "key=qt-${{ env.QT_VERSION }}-${{ env.QT_ARCH }}" >> $env:GITHUB_OUTPUT
 
+      # 升级 cache 到 v4
       - name: Restore Qt Cache
         id: cache-qt
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ env.QT_INSTALL_DIR }}
           key: ${{ steps.cache-key.outputs.key }}
@@ -46,7 +47,8 @@ jobs:
     runs-on: windows-latest
     
     steps:
-    - uses: actions/checkout@v3
+    # 升级 checkout 到 v4
+    - uses: actions/checkout@v4
 
     # 1. 恢复之前缓存的 Qt 目录
     - name: Compute Cache Key
@@ -55,8 +57,9 @@ jobs:
       run: |
         echo "key=qt-${{ env.QT_VERSION }}-${{ env.QT_ARCH }}" >> $env:GITHUB_OUTPUT
 
+    # 升级 cache 到 v4
     - name: Restore Qt Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ${{ env.QT_INSTALL_DIR }}
         key: ${{ steps.cache-key.outputs.key }}
@@ -79,9 +82,10 @@ jobs:
     - name: Build
       run: cmake --build build --config Release
 
-    # 5. 上传产物
+    # 5. 上传产物 (修复点：升级到 v4)
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: NetToolPro-Windows-Release
         path: build/Release/NetToolPro.exe
+        # v4 版本默认不允许同名 artifact 覆盖，但这对于一次性构建没有影响
