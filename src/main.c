@@ -1,4 +1,4 @@
-// === 核心修复：将 network_tools.h 放在最前面，因为它包含了 winsock2.h ===
+// === 核心修复：将 network_tools.h 放在最前面 ===
 #include "network_tools.h" 
 #include <windows.h>
 #include <commctrl.h>
@@ -67,11 +67,13 @@ void add_list_row(const char* pipedData) {
     lvItem.iSubItem = 0;
     lvItem.pszText = token ? token : "";
     
-    ListView_InsertItemA(hList, &lvItem);
+    // 修复点1：ListView_InsertItemA -> ListView_InsertItem
+    ListView_InsertItem(hList, &lvItem);
     
     int col = 1;
     while ((token = strtok_s(NULL, "|", &ctx))) {
-        ListView_SetItemTextA(hList, lvItem.iItem, col++, token);
+        // 修复点2：ListView_SetItemTextA -> ListView_SetItemText
+        ListView_SetItemText(hList, lvItem.iItem, col++, token);
     }
     free(copy);
 }
@@ -99,7 +101,8 @@ void export_csv() {
             char buf[256];
             for (int j = 0; j < colCount; j++) {
                 HDITEMA hdi = { HDI_TEXT, 0, buf, NULL, 255, 0 };
-                Header_GetItemA(hHeader, j, &hdi);
+                // 修复点3：Header_GetItemA -> Header_GetItem
+                Header_GetItem(hHeader, j, &hdi);
                 fprintf(fp, "%s%s", j == 0 ? "" : ",", buf);
             }
             fprintf(fp, "\n");
@@ -107,7 +110,8 @@ void export_csv() {
             // 写入数据
             for (int i = 0; i < rowCount; i++) {
                 for (int j = 0; j < colCount; j++) {
-                    ListView_GetItemTextA(hList, i, j, buf, sizeof(buf));
+                    // 修复点4：ListView_GetItemTextA -> ListView_GetItemText
+                    ListView_GetItemText(hList, i, j, buf, sizeof(buf));
                     fprintf(fp, "%s%s", j == 0 ? "" : ",", buf);
                 }
                 fprintf(fp, "\n");
@@ -166,7 +170,8 @@ void start_task(TaskType type) {
         char* cols[] = {"目标地址", "状态", "平均延迟(ms)", "丢包率(%)", "TTL"};
         for(int i=0; i<5; i++) {
             LVCOLUMNA lvc = {0}; lvc.mask = LVCF_TEXT | LVCF_WIDTH; lvc.pszText = cols[i]; lvc.cx = (i==0?180:100);
-            ListView_InsertColumnA(hList, i, &lvc);
+            // 修复点5：ListView_InsertColumnA -> ListView_InsertColumn
+            ListView_InsertColumn(hList, i, &lvc);
         }
         _beginthreadex(NULL, 0, thread_ping, p, 0, NULL);
     } 
@@ -174,21 +179,21 @@ void start_task(TaskType type) {
         char* cols[] = {"目标地址", "端口", "状态"};
         for(int i=0; i<3; i++) {
             LVCOLUMNA lvc = {0}; lvc.mask = LVCF_TEXT | LVCF_WIDTH; lvc.pszText = cols[i]; lvc.cx = (i==0?200:100);
-            ListView_InsertColumnA(hList, i, &lvc);
+            ListView_InsertColumn(hList, i, &lvc);
         }
         _beginthreadex(NULL, 0, thread_port_scan, p, 0, NULL);
     } 
     else if (type == TASK_EXTRACT) {
         char* cols[] = {"提取到的IP地址"};
         LVCOLUMNA lvc = {0}; lvc.mask = LVCF_TEXT|LVCF_WIDTH; lvc.pszText = cols[0]; lvc.cx = 300;
-        ListView_InsertColumnA(hList, 0, &lvc);
+        ListView_InsertColumn(hList, 0, &lvc);
         _beginthreadex(NULL, 0, thread_extract_ip, p, 0, NULL);
     }
     else if (type == TASK_SINGLE_SCAN) {
         char* cols[] = {"目标地址", "开放端口", "服务/备注"};
         for(int i=0; i<3; i++) {
             LVCOLUMNA lvc = {0}; lvc.mask = LVCF_TEXT|LVCF_WIDTH; lvc.pszText = cols[i]; lvc.cx = (i==0?150:100);
-            ListView_InsertColumnA(hList, i, &lvc);
+            ListView_InsertColumn(hList, i, &lvc);
         }
         _beginthreadex(NULL, 0, thread_single_scan, p, 0, NULL);
     }
