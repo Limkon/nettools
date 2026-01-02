@@ -5,6 +5,16 @@ project(NetToolProC VERSION 3.7 LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# === 核心修复 ===
+# 1. 定义 UNICODE 宏，切换到 Windows 宽字符 API
+add_compile_definitions(UNICODE _UNICODE)
+
+# 2. 强制 MSVC 使用 UTF-8 读取源码并生成执行字符集
+# 这确保了代码中的 L"中文" 能被正确编译
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 # 包含源文件
 set(PROJECT_SOURCES
     src/main.c
@@ -15,7 +25,7 @@ set(PROJECT_HEADERS
     src/network_tools.h
 )
 
-# 资源文件 (如果有 .rc 文件则添加)
+# 资源文件
 if(EXISTS "${CMAKE_SOURCE_DIR}/resources/NetToolPro.rc")
     list(APPEND PROJECT_SOURCES resources/NetToolPro.rc)
 endif()
@@ -34,6 +44,6 @@ if(WIN32)
         advapi32
         wininet
     )
-    # 设置为 Windows GUI 子系统 (去除控制台窗口)
+    # 设置为 Windows GUI 子系统
     set_target_properties(NetToolPro PROPERTIES WIN32_EXECUTABLE ON)
 endif()
