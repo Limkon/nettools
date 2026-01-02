@@ -5,15 +5,27 @@ project(NetToolPro VERSION 3.7 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 查找 Qt6 组件
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network Core)
 
-# 源文件列表
+# --- 修改点 1: 定义资源文件变量 ---
+set(PROJECT_RESOURCES
+    resources/resources.qrc
+)
+
+set(WIN_RC_FILE "")
+if(WIN32)
+    set(WIN_RC_FILE resources/NetToolPro.rc)
+endif()
+# -------------------------------
+
 set(PROJECT_SOURCES
     src/main.cpp
     src/MainWindow.cpp
     src/WorkerThreads.cpp
     src/ProxyManager.cpp
+    # --- 修改点 2: 加入资源文件 ---
+    ${PROJECT_RESOURCES}
+    ${WIN_RC_FILE}
 )
 
 set(PROJECT_HEADERS
@@ -22,18 +34,16 @@ set(PROJECT_HEADERS
     src/ProxyManager.h
 )
 
-# 如果是 Windows，链接必要的系统库 (用于ICMP Ping和注册表操作)
 if(WIN32)
     list(APPEND SYSTEM_LIBS Iphlpapi Ws2_32 Advapi32)
 endif()
 
-# 定义可执行文件 (WIN32 选项用于隐藏控制台窗口)
+# --- 修改点 3: 确保 add_executable 包含了资源文件 ---
 add_executable(NetToolPro WIN32
     ${PROJECT_SOURCES}
     ${PROJECT_HEADERS}
 )
 
-# 链接库
 target_link_libraries(NetToolPro PRIVATE
     Qt6::Widgets
     Qt6::Network
@@ -41,8 +51,7 @@ target_link_libraries(NetToolPro PRIVATE
     ${SYSTEM_LIBS}
 )
 
-# 处理 Qt 的 MOC (Meta-Object Compiler) 等自动生成
 set_property(TARGET NetToolPro PROPERTY CXX_STANDARD 17)
 set_property(TARGET NetToolPro PROPERTY AUTOMOC ON)
 set_property(TARGET NetToolPro PROPERTY AUTOUIC ON)
-set_property(TARGET NetToolPro PROPERTY AUTORCC ON)
+set_property(TARGET NetToolPro PROPERTY AUTORCC ON) # 必须开启 AUTORCC 以处理 .qrc
