@@ -1,15 +1,13 @@
-name: Windows Build (Robust Split)
+name: Windows Build (Deploy)
 
 on: workflow_dispatch
 
 env:
   QT_VERSION: '6.5.0'
   QT_ARCH: 'win64_msvc2019_64'
-  # 【修正点1】将目录改到工作区内部，避免 "../" 造成的路径问题
   QT_INSTALL_DIR: '${{ github.workspace }}/Qt'
 
 jobs:
-  # --- 第一阶段：缓存预热 (Cache Warmer) ---
   prepare-dependencies:
     runs-on: windows-latest
     steps:
@@ -38,7 +36,6 @@ jobs:
           cache: 'false'
           setup-python: 'false' 
 
-  # --- 第二阶段：构建应用 (Build) ---
   build-application:
     needs: prepare-dependencies
     runs-on: windows-latest
@@ -52,7 +49,6 @@ jobs:
       run: |
         echo "key=qt-${{ env.QT_VERSION }}-${{ env.QT_ARCH }}" >> $env:GITHUB_OUTPUT
 
-    # 【修正点2】尝试恢复缓存，但删除了 fail-on-cache-miss: true
     - name: Restore Qt Cache
       id: cache-qt
       uses: actions/cache@v4
@@ -60,8 +56,6 @@ jobs:
         path: ${{ env.QT_INSTALL_DIR }}
         key: ${{ steps.cache-key.outputs.key }}
 
-    # 【修正点3】容错机制：如果 Job 2 没读到缓存（无论是因为 Job 1 失败还是网络问题），这里会自动补装
-    # 这样保证了构建永远不会因为“缓存找不到”而失败
     - name: Install Qt (Fallback)
       if: steps.cache-qt.outputs.cache-hit != 'true'
       uses: jurplel/install-qt-action@v3
@@ -88,8 +82,26 @@ jobs:
     - name: Build
       run: cmake --build build --config Release
 
+    # --- 以下是新增/修改的打包步骤 ---
+
+    # 1. 创建一个干净的发布目录，把 exe 拷进去
+    - name: Create Publish Directory
+      shell: powershell
+      run: |
+        New-Item -ItemType Directory -Force -Path "publish"
+        Copy-Item "build\Release\NetToolPro.exe" -Destination "publish\"
+
+    # 2. 运行 windeployqt 自动抓取缺失的 DLL
+    # --dir .: 输出到当前目录
+    # --compiler-runtime: 同时打包 VC++ 运行库，防止别人电脑缺运行库
+    - name: Run windeployqt (Package DLLs)
+      shell: powershell
+      run: |
+        windeployqt --release --compiler-runtime --no-translations --dir publish publish\NetToolPro.exe
+
+    # 3. 上传整个 publish 文件夹，而不是单个 exe
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
         name: NetToolPro-Windows-Release
-        path: build/Release/NetToolPro.exe
+        path: publish/
