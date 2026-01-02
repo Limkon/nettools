@@ -105,9 +105,12 @@ void add_list_row(const wchar_t* pipedData) {
     
     int col = 1;
     while ((token = wcstok_s(NULL, L"|", &ctx))) {
-        // [修改] 如果 token 是占位符 "-", 显示为空
-        if (wcscmp(token, L"-") == 0) ListView_SetItemText(hList, lvItem.iItem, col++, L"");
-        else ListView_SetItemText(hList, lvItem.iItem, col++, token);
+        // [修复] 增加花括号以避免宏展开导致的 if-else 错误
+        if (wcscmp(token, L"-") == 0) {
+            ListView_SetItemText(hList, lvItem.iItem, col++, L"");
+        } else {
+            ListView_SetItemText(hList, lvItem.iItem, col++, token);
+        }
     }
     free(copy);
 }
