@@ -484,7 +484,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             int btnY = grp1Y + 195;
             CreateWindowW(L"BUTTON", L"开始批量 Ping", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 30, btnY, 120, 30, hWnd, (HMENU)ID_BTN_PING, hInst, NULL);
             CreateWindowW(L"BUTTON", L"批量端口扫描", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 160, btnY, 120, 30, hWnd, (HMENU)ID_BTN_SCAN, hInst, NULL);
-            CreateWindowW(L"BUTTON", L"从文本提取IP", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 290, btnY, 120, 30, hWnd, (HMENU)ID_BTN_EXTRACT, hInst, NULL);
+            CreateWindowW(L"BUTTON", L"从文本提取IP/域名", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 290, btnY, 120, 30, hWnd, (HMENU)ID_BTN_EXTRACT, hInst, NULL);
             CreateWindowW(L"BUTTON", L"中止任务", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 420, btnY, 100, 30, hWnd, (HMENU)ID_BTN_STOP, hInst, NULL);
             
             hBtnProxy = CreateWindowW(L"BUTTON", L"设置系统代理", WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON, 530, btnY, 100, 30, hWnd, (HMENU)ID_BTN_PROXY, hInst, NULL);
