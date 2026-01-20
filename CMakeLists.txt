@@ -14,14 +14,19 @@ if(MSVC)
     add_compile_options(/utf-8)
 endif()
 
-# 包含源文件
+# 包含源文件 - [修复] 添加了缺失的 ipv4/ipv6/domain 模块文件
 set(PROJECT_SOURCES
     src/main.c
     src/network_tools.c
+    src/network_ipv4.c
+    src/network_ipv6.c
+    src/network_domain.c
 )
 
+# 包含头文件 - [建议] 添加 network_modules.h 以便 IDE 识别
 set(PROJECT_HEADERS
     src/network_tools.h
+    src/network_modules.h
 )
 
 # 资源文件
